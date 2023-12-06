@@ -1,0 +1,92 @@
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
+
+public class Server {
+    private static List<ClientHandler> clients = new ArrayList<>();
+
+    public static void main(String[] args) {
+        final int PORT = 12345;
+
+        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+            System.out.println("Начало работы сервера.");
+
+            while (true) {
+                // Ожидание подключения клиента
+                Socket clientSocket = serverSocket.accept();
+                System.out.println("Новое подключение");
+
+                // Создание и запуск потока для обработки клиента
+                ClientHandler clientHandler = new ClientHandler(clientSocket);
+                clients.add(clientHandler);
+                clientHandler.start();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Класс для обработки клиентского подключения в отдельном потоке
+    private static class ClientHandler extends Thread {
+        private Socket clientSocket;
+        private BufferedReader reader;
+        private PrintWriter writer;
+
+        public ClientHandler(Socket clientSocket) {
+            this.clientSocket = clientSocket;
+        }
+
+        public PrintWriter getWriter() {
+            return writer;
+        }
+
+        @Override
+        public void run() {
+            try {
+                reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                writer = new PrintWriter(clientSocket.getOutputStream(), true);
+
+                while (true) {
+                    String command = reader.readLine();
+
+                    if (command.equals("receive")) {
+                        writer.println("Вы получатель");
+
+                        while (true) {
+                            String message = reader.readLine();
+                            if (message.equals("-конец-")) {
+                                break;
+                            }
+
+                            // Отправляем сообщение текущему клиенту
+                            writer.println("Сообщение от клиента: " + message);
+                        }
+                    } else if (command.equals("send")) {
+                        writer.println("Вы отправитель");
+                        String message = reader.readLine();
+
+                        for (ClientHandler client : clients) {
+                            if (client != this) {
+                                // Отправляем сообщение всем подписанным клиентам
+                                client.getWriter().println(message);
+                            }
+                        }
+
+                        writer.println("Сообщение отправлено");
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                try {
+                    reader.close();
+                    writer.close();
+                    clientSocket.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+}
